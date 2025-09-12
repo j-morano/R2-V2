@@ -15,18 +15,18 @@ The weights and the configuration files of the models are available at the **Rel
 
 ## Usage
 
-The implementation is based on Python 3.12, PyTorch 2.2, and CUDA 12.1.
+The implementation is based on Python 3.12.8, PyTorch 2.8, and CUDA 12.8.
 It also uses other libraries, such as scikit-image and NumPy, for image processing and transformations.
 
 Thus, for running the code, it is first necessary to set up the environment.
 
 
 <details>
-<summary><b>Installing Python 3.12 using pyenv</b></summary>
+<summary><b>Installing Python 3.12.8 using pyenv</b></summary>
 
-### Python 3.12 (`pyenv`)
+### Python 3.12.8 (`pyenv`)
 
-> **📌 IMPORTANT**: The following steps are only necessary if you want to install Python 3.12 using `pyenv`.
+> **📌 IMPORTANT**: The following steps are only necessary if you want to install Python 3.12.8 using `pyenv`.
 
 Install `pyenv`.
 ```sh
@@ -38,14 +38,14 @@ Install `clang`. _E.g._:
 sudo dnf install clang
 ```
 
-Install Python version 3.12.
+Install Python version 3.12.8.
 ```sh
-CC=clang pyenv install -v 3.12
+CC=clang pyenv install -v 3.12.8
 ```
 
 Create and activate Python environment.
 ```sh
-~/.pyenv/versions/3.12/bin/python3 -m venv venv/
+~/.pyenv/versions/3.12.8/bin/python3 -m venv venv/
 source venv/bin/activate  # bash
 . venv/bin/activate.fish  # fish
 ```
