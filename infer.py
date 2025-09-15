@@ -1,3 +1,4 @@
+from typing import Any
 from pathlib import Path
 import argparse
 from argparse import Namespace
@@ -8,15 +9,86 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 import torch
+from torch.nn import functional as F
 from torch import Tensor
 from torch import nn
 from torchvision import utils as vutils
 from skimage import io
+from skimage.transform import resize
 
 from transformations import to_torch_tensors, pad_images_unet
 from model import RRWNet
 import preprocessing
 
+
+
+########################################################################
+# Dataclasses
+
+
+@dataclass
+class DataPaths:
+    cfp: Path
+    pre: Path | None
+    mask: Path | None
+
+
+@dataclass
+class ResizedImage:
+    img: NDArray
+    ohw: tuple[int, int] | None  # original height and width
+
+
+########################################################################
+# Functions
+
+
+def get_args() -> Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-i', '--cfp_path',
+        type=str, required=True,
+        help='Path to input CFP images (required)'
+    )
+    parser.add_argument(
+        '-t', '--model_type',
+        type=str, choices=['av', 'bv'], default='av',
+        help='Type of model to use: av (artery/vein) or bv (blood vessels) [default: %(default)s]'
+    )
+    parser.add_argument(
+        '-w', '--weights_path',
+        type=str, default='./__weights',
+        help='Path to weights directory [default: %(default)s]'
+    )
+    parser.add_argument(
+        '-s', '--save_path',
+        type=str, default='./__predictions',
+        help='Path to save predictions [default: %(default)s]'
+    )
+    parser.add_argument(
+        '-m', '--masks_path',
+        type=str, default=None,
+        help='Path to the masks [default: %(default)s]'
+    )
+    parser.add_argument(
+        '-p', '--pre_path',
+        type=str, default=None,
+        help='Path to the preprocessed images [default: %(default)s]'
+    )
+    parser.add_argument(
+        '-g', '--use-gave-format',
+        action='store_true', default=False,
+        help='Save output in GAVE format (R for arteries, B for all'
+            ' blood vessels, G for veins); otherwise the format is'
+            ' as in RRWNet (R for arteries, G for veins, B for all'
+            ' blood vessels) [default: %(default)s]'
+    )
+    parser.add_argument(
+        '--tta',
+        action='store_true', default=False,
+        help='Use test time augmentation [default: %(default)s]'
+    )
+    return parser.parse_args()
 
 
 def get_models_prediction(model: nn.Module, tensor: Tensor) -> Tensor:
@@ -120,13 +192,6 @@ def in_parent_or_none(ref_path: Path, this_path: str | None, default: str) -> Pa
     return path
 
 
-@dataclass
-class DataPaths:
-    cfp: Path
-    pre: Path | None
-    mask: Path | None
-
-
 def get_paths(args: Namespace) -> DataPaths:
     cfp_path = Path(args.cfp_path)
     assert cfp_path.exists(), cfp_path
@@ -138,53 +203,6 @@ def get_paths(args: Namespace) -> DataPaths:
         mask=masks_path,
     )
 
-
-def get_args() -> Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-i', '--cfp_path',
-        type=str, required=True,
-        help='Path to input CFP images (required)'
-    )
-    parser.add_argument(
-        '-t', '--model_type',
-        type=str, choices=['av', 'bv'], default='av',
-        help='Type of model to use: av (artery/vein) or bv (blood vessels) [default: %(default)s]'
-    )
-    parser.add_argument(
-        '-w', '--weights_path',
-        type=str, default='./__weights',
-        help='Path to weights directory [default: %(default)s]'
-    )
-    parser.add_argument(
-        '-s', '--save_path',
-        type=str, default='./__predictions',
-        help='Path to save predictions [default: %(default)s]'
-    )
-    parser.add_argument(
-        '-m', '--masks_path',
-        type=str, default=None,
-        help='Path to the masks [default: %(default)s]'
-    )
-    parser.add_argument(
-        '-p', '--pre_path',
-        type=str, default=None,
-        help='Path to the preprocessed images [default: %(default)s]'
-    )
-    parser.add_argument(
-        '-g', '--use-gave-format',
-        action='store_true', default=False,
-        help='Save output in GAVE format (R for arteries, B for all'
-            ' blood vessels, G for veins); otherwise the format is'
-            ' as in RRWNet (R for arteries, G for veins, B for all'
-            ' blood vessels) [default: %(default)s]'
-    )
-    parser.add_argument(
-        '--tta',
-        action='store_true', default=False,
-        help='Use test time augmentation [default: %(default)s]'
-    )
-    return parser.parse_args()
 
 
 def get_model(config: Namespace, checkpoint: dict, device) -> nn.Module:
@@ -206,7 +224,7 @@ def get_model(config: Namespace, checkpoint: dict, device) -> nn.Module:
     return model
 
 
-def read_to_zero_one(img_fn) -> NDArray:
+def read_to_zero_one(img_fn) -> ResizedImage:
     img = io.imread(img_fn).astype(np.float32)
     if img.max() > 255:
         img = img / 65535.0
@@ -215,7 +233,19 @@ def read_to_zero_one(img_fn) -> NDArray:
     img = np.clip(img, 0.0, 1.0)
     if len(img.shape) == 3:
         img = img[..., :3]
-    return img
+    h, w = img.shape[0], img.shape[1]
+    original_spatial_shape = (h, w)
+    if w != 1408:
+        new_w = 1408
+        new_h = int(h * (new_w / w))
+        img = resize(img, (new_h, new_w), anti_aliasing=True, preserve_range=True)
+    else:
+        original_spatial_shape = None
+    if not isinstance(img, np.ndarray):
+        img = np.array(img)
+    if img.dtype != np.float32:
+        img = img.astype(np.float32)
+    return ResizedImage(img, original_spatial_shape)
 
 
 def get_corr_fn(ref_fn: Path, path: Path | None) -> Path | None:
@@ -225,6 +255,11 @@ def get_corr_fn(ref_fn: Path, path: Path | None) -> Path | None:
             if corr_fn.stem == ref_fn.stem:
                 break
     return corr_fn
+
+
+
+########################################################################
+# Functions
 
 
 def main():
@@ -261,15 +296,16 @@ def main():
         mask_fn = get_corr_fn(cfp_fn, paths.mask)
         pre_fn = get_corr_fn(cfp_fn, paths.pre)
         print(f'> Processing {cfp_fn.name}')
-        cfp = read_to_zero_one(cfp_fn)
+        cfp_res = read_to_zero_one(cfp_fn)
+        cfp = cfp_res.img
         print(f'  CFP shape: {cfp.shape}')
         if mask_fn is None:
             print(f'  Warning: No mask found, using thresholding')
             mask = (cfp.sum(axis=2) > 0.01).astype(np.float32)
         else:
-            mask = read_to_zero_one(mask_fn).astype(np.float32)
+            mask = read_to_zero_one(mask_fn).img.astype(np.float32)
         if pre_fn is not None:
-            pre = read_to_zero_one(pre_fn)
+            pre = read_to_zero_one(pre_fn).img
         else:
             print(f'  Warning: No preprocessed image found, preprocessing on the fly')
             pre, mask = preprocessing.preprocess_img(cfp, mask)
@@ -302,6 +338,13 @@ def main():
                 pred_form[:, 2] = pred[:, 1]
             else:
                 pred_form = pred
+            if cfp_res.ohw is not None:
+                pred_form = F.interpolate(
+                    pred_form,
+                    size=cfp_res.ohw,
+                    mode='bilinear',
+                    align_corners=False
+                )
             save_fn = save_path / Path(cfp_fn).name
             vutils.save_image(pred_form, save_fn)
             gc.collect()
