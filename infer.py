@@ -1,4 +1,3 @@
-from typing import Any
 from pathlib import Path
 import argparse
 from argparse import Namespace
@@ -95,8 +94,6 @@ def get_models_prediction(model: nn.Module, tensor: Tensor) -> Tensor:
     pred = model(tensor)
     if isinstance(pred, list):
         pred = pred[-1]
-    else:
-        pred = pred
     return pred
 
 
@@ -348,6 +345,7 @@ def main():
             save_fn = save_path / Path(cfp_fn).name
             vutils.save_image(pred_form, save_fn)
             gc.collect()
+            torch.cuda.empty_cache()
 
     print('Images saved in', save_path)
 
