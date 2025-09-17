@@ -60,6 +60,11 @@ def get_args() -> Namespace:
         help='Path to weights directory [default: %(default)s]'
     )
     parser.add_argument(
+        '--weights',
+        type=str, default=None,
+        help='Path to weights file (overrides model_type and weights_path) [default: %(default)s]'
+    )
+    parser.add_argument(
         '-s', '--save_path',
         type=str, default='./__predictions',
         help='Path to save predictions [default: %(default)s]'
@@ -269,12 +274,17 @@ def main():
 
     paths = get_paths(args)
     print('Paths:', paths)
+    weights_path = Path(args.weights_path)
 
     print(f'Loading model: {args.model_type}')
-    checkpoint = torch.load(f'__weights/{args.model_type}.pth')
+    if args.weights is not None:
+        print('  Overriding default weights, using', args.weights)
+        checkpoint = torch.load(args.weights)
+    else:
+        checkpoint = torch.load(weights_path / f'{args.model_type}.pth')
 
     print('Loading config')
-    with open(f'__weights/{args.model_type}_config.json', 'r') as f:
+    with open(weights_path / f'{args.model_type}_config.json', 'r') as f:
         config = json.load(f)
 
     print('Config:')
