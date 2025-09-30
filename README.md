@@ -2,6 +2,8 @@
 
 Code for running **R2-V2**, the winning method of the **Generalized Analysis of Vessels in Eye (GAVE) Challenge at MICCAI 2025**, focused on artery/vein segmentation in retinal fundus images.
 
+R2-V2 is based on our earlier [RRWNet method](https://github.com/j-morano/rrwnet).
+
 
 ## Available models
 
