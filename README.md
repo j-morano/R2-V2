@@ -1,6 +1,6 @@
 # R2-V2
 
-Code for running R2-V2 models for artery/vein segmentation in retinal fundus images.
+Code for running **R2-V2**, the winning method of the **Generalized Analysis of Vessels in Eye (GAVE) Challenge at MICCAI 2025**, focused on artery/vein segmentation in retinal fundus images.
 
 
 ## Available models
